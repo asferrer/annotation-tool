@@ -18,6 +18,7 @@ export interface LabelingJob {
   annotations_created: number
   current_image?: string
   output_dir?: string
+  image_directories?: string[]
   objects_by_class?: Record<string, number>
   quality_metrics?: QualityMetrics
   warnings?: string[]

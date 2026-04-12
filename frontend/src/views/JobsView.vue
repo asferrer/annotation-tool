@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useUiStore } from '@/stores/ui'
 import { listLabelingJobs, cancelLabelingJob } from '@/lib/api'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -11,9 +12,12 @@ import {
   XCircle,
   Clock,
   Loader,
+  Eye,
+  GitCompare,
 } from 'lucide-vue-next'
 import type { LabelingJob } from '@/types/api'
 
+const router = useRouter()
 const uiStore = useUiStore()
 
 const jobs = ref<LabelingJob[]>([])
@@ -49,6 +53,22 @@ async function cancel(jobId: string) {
 
 function toggleError(jobId: string) {
   expandedError.value = expandedError.value === jobId ? null : jobId
+}
+
+function reviewJob(job: LabelingJob) {
+  if (!job.output_dir) return
+  const cocoPath = job.output_dir.replace(/\/$/, '') + '/annotations.json'
+  const imagesDir = job.image_directories?.[0] ?? ''
+  router.push({
+    path: '/annotation-review',
+    query: { coco_json_path: cocoPath, images_dir: imagesDir },
+  })
+}
+
+function compareJob(job: LabelingJob) {
+  if (!job.output_dir) return
+  const predPath = job.output_dir.replace(/\/$/, '') + '/annotations.json'
+  router.push({ path: '/comparison', query: { pred_path: predPath } })
 }
 
 function statusIcon(status: LabelingJob['status']) {
@@ -146,6 +166,26 @@ onUnmounted(() => {
 
           <div class="flex items-center gap-3">
             <span class="text-lg font-bold text-primary w-12 text-right">{{ job.progress }}%</span>
+
+            <BaseButton
+              v-if="job.status === 'completed' && job.output_dir"
+              variant="outline"
+              size="sm"
+              @click="reviewJob(job)"
+            >
+              <Eye class="h-4 w-4" />
+              Review
+            </BaseButton>
+
+            <BaseButton
+              v-if="job.status === 'completed' && job.output_dir"
+              variant="outline"
+              size="sm"
+              @click="compareJob(job)"
+            >
+              <GitCompare class="h-4 w-4" />
+              Compare
+            </BaseButton>
 
             <BaseButton
               v-if="job.status === 'failed' && job.error"

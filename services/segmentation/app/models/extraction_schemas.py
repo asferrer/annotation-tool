@@ -645,6 +645,7 @@ class LabelingJobStatus(BaseModel):
     objects_by_class: Dict[str, int] = {}
     current_image: str = ""
     output_dir: str = ""
+    image_directories: List[str] = []
     output_formats: List[str] = []
     errors: List[str] = []
     warnings: List[str] = Field(

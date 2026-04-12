@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useUiStore } from '@/stores/ui'
-import { loadAnnotations, saveAnnotations, getImageUrl, scanImages, startLabeling, getLabelingJobStatus } from '@/lib/api'
+import { loadAnnotations, saveAnnotations, getImageUrl, scanImages, startLabeling, getLabelingJobStatus, uploadImages } from '@/lib/api'
 import { useAnnotationEditor, type ToolMode } from '@/composables/useAnnotationEditor'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import AlertBox from '@/components/common/AlertBox.vue'
@@ -12,7 +13,7 @@ import {
   Eye, EyeOff, Tag, Trash2, Search, ImageIcon,
   AlertCircle, CheckCircle2, MousePointer2,
   Square, Hand, Undo2, Redo2, ChevronLeft, ChevronRight,
-  Wand2, Plus, X, Loader2, FolderOpen as FolderIcon, Layers,
+  Wand2, Plus, X, Loader2, FolderOpen as FolderIcon, Layers, Upload, HardDrive,
 } from 'lucide-vue-next'
 
 // ---------------------------------------------------------------------------
@@ -30,6 +31,7 @@ const HANDLE_SIZE = 8
 // ---------------------------------------------------------------------------
 // Stores & editor
 // ---------------------------------------------------------------------------
+const route = useRoute()
 const uiStore = useUiStore()
 const editor = useAnnotationEditor()
 
@@ -41,6 +43,10 @@ const imagesDirPath = ref('')
 const isLoadingDataset = ref(false)
 const loadError = ref<string | null>(null)
 const loadMode = ref<'coco' | 'images'>('coco') // coco = load existing, images = scan directory
+const imagesSource = ref<'path' | 'upload'>('path')
+const imageFiles = ref<File[]>([])
+const imageUploadProgress = ref(0)
+const isUploadingImages = ref(false)
 
 // ---------------------------------------------------------------------------
 // Category management
@@ -206,7 +212,45 @@ const currentImageIndex = computed(() => filteredImages.value.findIndex((img) =>
 // ---------------------------------------------------------------------------
 // Dataset loading
 // ---------------------------------------------------------------------------
+const IMAGE_RE = /\.(jpg|jpeg|png|bmp|webp|tiff|tif)$/i
+
+function onImageFilesSelected(e: Event) {
+  const input = e.target as HTMLInputElement
+  if (input.files) {
+    imageFiles.value = [...imageFiles.value, ...Array.from(input.files).filter(f => IMAGE_RE.test(f.name))]
+  }
+  input.value = ''
+}
+
+async function handleUploadImages(): Promise<boolean> {
+  if (imageFiles.value.length === 0) {
+    loadError.value = 'Select image files to upload.'
+    return false
+  }
+  isUploadingImages.value = true
+  try {
+    const taskName = cocoJsonPath.value
+      ? cocoJsonPath.value.split('/').pop()?.replace('.json', '') || 'review'
+      : 'review_' + Date.now()
+    const result = await uploadImages(taskName, imageFiles.value, (uploaded, total) => {
+      imageUploadProgress.value = Math.round((uploaded / total) * 100)
+    })
+    imagesDirPath.value = result.directory
+    uiStore.showSuccess('Images uploaded', `${result.uploaded_count} images uploaded`)
+    return true
+  } catch (e: any) {
+    loadError.value = e.message || 'Image upload failed'
+    return false
+  } finally {
+    isUploadingImages.value = false
+  }
+}
+
 async function handleLoadDataset() {
+  if (imagesSource.value === 'upload' && !imagesDirPath.value.trim()) {
+    const ok = await handleUploadImages()
+    if (!ok) return
+  }
   if (!imagesDirPath.value.trim()) {
     loadError.value = 'Please provide the images directory path.'
     return
@@ -601,7 +645,18 @@ function handleKeyDown(e: KeyboardEvent) {
   }
 }
 
-onMounted(() => window.addEventListener('keydown', handleKeyDown))
+onMounted(async () => {
+  window.addEventListener('keydown', handleKeyDown)
+
+  const qCocoPath = route.query.coco_json_path as string | undefined
+  const qImagesDir = route.query.images_dir as string | undefined
+  if (qCocoPath) {
+    cocoJsonPath.value = qCocoPath
+    if (qImagesDir) imagesDirPath.value = qImagesDir
+    loadMode.value = 'coco'
+    await handleLoadDataset()
+  }
+})
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyDown)
   if (autoLabelPollTimer) {
@@ -639,10 +694,48 @@ function formatBbox(bbox: [number, number, number, number]): string {
 
       <div class="card p-5 space-y-4">
         <DirectoryBrowser v-if="loadMode === 'coco'" v-model="cocoJsonPath" label="COCO JSON file" placeholder="/app/datasets/annotations.json" :show-files="true" file-pattern="*.json" path-mode="input" :restrict-to-mounts="false" />
-        <DirectoryBrowser v-model="imagesDirPath" label="Images directory" placeholder="/app/datasets/images" :show-files="false" path-mode="input" :restrict-to-mounts="false" />
+
+        <!-- Images source toggle -->
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <label class="text-sm font-medium text-gray-300">Images source</label>
+            <div class="flex gap-0.5 bg-background-tertiary rounded-md p-0.5 text-xs">
+              <button :class="['px-2 py-1 rounded transition-colors flex items-center gap-1', imagesSource === 'path' ? 'bg-primary text-white' : 'text-gray-400 hover:text-white']" @click="imagesSource = 'path'">
+                <HardDrive class="h-3 w-3" /> Server Path
+              </button>
+              <button :class="['px-2 py-1 rounded transition-colors flex items-center gap-1', imagesSource === 'upload' ? 'bg-primary text-white' : 'text-gray-400 hover:text-white']" @click="imagesSource = 'upload'">
+                <Upload class="h-3 w-3" /> Upload from PC
+              </button>
+            </div>
+          </div>
+
+          <DirectoryBrowser v-if="imagesSource === 'path'" v-model="imagesDirPath" label="Images directory" placeholder="/app/datasets/images" :show-files="false" path-mode="input" :restrict-to-mounts="false" />
+
+          <div v-else class="space-y-3">
+            <div class="border-2 border-dashed border-gray-600 rounded-lg p-4 text-center hover:border-gray-500 transition-colors">
+              <input type="file" multiple accept="image/*" class="hidden" id="review-image-upload" @change="onImageFilesSelected" />
+              <label for="review-image-upload" class="cursor-pointer">
+                <Upload class="h-8 w-8 text-gray-500 mx-auto mb-2" />
+                <p class="text-sm text-gray-400">Click to select images or a folder</p>
+                <p class="text-xs text-gray-500 mt-1">JPG, PNG, BMP, WebP, TIFF</p>
+              </label>
+            </div>
+            <div v-if="imageFiles.length > 0" class="flex items-center gap-2 text-sm text-gray-300">
+              <ImageIcon class="h-4 w-4" />
+              <span>{{ imageFiles.length }} images selected</span>
+              <button class="text-red-400 hover:text-red-300 text-xs ml-auto" @click="imageFiles = []">Clear</button>
+            </div>
+            <div v-if="isUploadingImages" class="space-y-1">
+              <div class="h-1.5 bg-background-tertiary rounded-full overflow-hidden">
+                <div class="h-full bg-primary transition-all duration-300" :style="{ width: imageUploadProgress + '%' }" />
+              </div>
+              <p class="text-xs text-gray-500">Uploading {{ imageUploadProgress }}%</p>
+            </div>
+          </div>
+        </div>
 
         <div class="flex items-center gap-3">
-          <BaseButton variant="primary" :loading="isLoadingDataset" @click="handleLoadDataset">
+          <BaseButton variant="primary" :loading="isLoadingDataset || isUploadingImages" @click="handleLoadDataset">
             <FolderOpen class="h-4 w-4" />
             {{ loadMode === 'coco' ? 'Load Dataset' : 'Scan & Start' }}
           </BaseButton>
