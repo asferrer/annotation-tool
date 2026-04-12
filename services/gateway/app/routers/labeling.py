@@ -84,7 +84,7 @@ async def start_labeling(request: LabelingStartRequest):
 
 @router.post("/relabel")
 async def start_relabeling(request: RelabelingRequest):
-    return await _proxy("POST", "/labeling/start-relabeling", request.model_dump())
+    return await _proxy("POST", "/labeling/relabel", request.model_dump())
 
 
 @router.get("/jobs")

@@ -80,6 +80,8 @@ async def start_labeling_job(request: StartLabelingRequest):
                 for img_path in dir_obj.rglob(f"*{ext.upper()}"):
                     all_image_paths.append(str(img_path))
 
+        # Deduplicate (case-insensitive FS may return same file for .jpg and .JPG)
+        all_image_paths = list(dict.fromkeys(all_image_paths))
         total_images = len(all_image_paths)
 
         if total_images == 0:
@@ -169,6 +171,7 @@ async def start_labeling_job(request: StartLabelingRequest):
                         "output_formats": request.output_formats,
                         "task_type": request.task_type,
                         "min_confidence": request.min_confidence,
+                        "image_directories": [str(d) for d in request.image_directories],
                     },
                     total_items=total_images,
                     output_path=str(output_dir)
@@ -660,6 +663,7 @@ async def get_labeling_job_status(job_id: str):
                     can_resume = False
                     if db_job.get("status") in ["interrupted", "failed"]:
                         can_resume = (Path(output_path) / "checkpoint.json").exists()
+                    req_params = db_job.get("request_params") or {}
                     return LabelingJobStatus(
                         job_id=job_id,
                         job_type=db_job.get("job_type", "labeling"),
@@ -671,6 +675,7 @@ async def get_labeling_job_status(job_id: str):
                         total_objects_found=result_summary.get("total_objects_found", 0),
                         objects_by_class=result_summary.get("objects_by_class", {}),
                         output_dir=output_path,
+                        image_directories=req_params.get("image_directories", []),
                         started_at=db_job.get("started_at"),
                         completed_at=db_job.get("completed_at"),
                         can_resume=can_resume,
@@ -722,6 +727,7 @@ async def get_labeling_job_status(job_id: str):
         objects_by_class=job.get("objects_by_class", {}),
         current_image=job.get("current_image", ""),
         output_dir=job.get("output_dir", ""),
+        image_directories=job.get("image_directories", []),
         output_formats=job.get("output_formats", []),
         errors=job.get("errors", [])[:50],
         warnings=job.get("warnings", [])[:20],  # Include warnings
