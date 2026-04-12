@@ -50,6 +50,12 @@ const routes = [
     meta: { title: 'Jobs' },
   },
   {
+    path: '/comparison',
+    name: 'comparison',
+    component: () => import('@/views/ComparisonView.vue'),
+    meta: { title: 'Comparison' },
+  },
+  {
     path: '/settings',
     name: 'settings',
     component: () => import('@/views/SettingsView.vue'),

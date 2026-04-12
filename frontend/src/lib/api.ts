@@ -225,6 +225,16 @@ export function getImageUrl(imagePath: string): string {
   return `/api/filesystem/image?path=${encodeURIComponent(imagePath)}`
 }
 
+// Comparison
+export async function evaluateComparison(request: {
+  ground_truth_path: string
+  predictions_path: string
+  iou_threshold: number
+}) {
+  const { data } = await api.post('/comparison/evaluate', request)
+  return data
+}
+
 // Jobs
 export async function getAllJobs() {
   const { data } = await api.get('/jobs')
