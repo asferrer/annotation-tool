@@ -14,7 +14,7 @@ import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import annotations, labeling, datasets, filesystem
+from app.routers import annotations, comparison, labeling, datasets, filesystem, sam3
 
 logger = logging.getLogger(__name__)
 
@@ -52,9 +52,47 @@ app.add_middleware(
 
 # Include routers
 app.include_router(annotations.router)
+app.include_router(comparison.router)
 app.include_router(labeling.router)
 app.include_router(datasets.router)
 app.include_router(filesystem.router)
+app.include_router(sam3.router)
+
+
+@app.get("/jobs", tags=["Jobs"])
+async def get_all_jobs():
+    """Unified endpoint that aggregates labeling and SAM3 jobs."""
+    import httpx as _httpx
+
+    all_jobs = []
+
+    async with _httpx.AsyncClient(timeout=10.0) as client:
+        # Fetch labeling jobs
+        try:
+            resp = await client.get(f"{SEGMENTATION_SERVICE_URL}/labeling/jobs")
+            if resp.status_code == 200:
+                data = resp.json()
+                jobs = data.get("jobs", []) if isinstance(data, dict) else []
+                for j in jobs:
+                    j["source"] = "labeling"
+                all_jobs.extend(jobs)
+        except Exception:
+            pass
+
+        # Fetch SAM3 jobs
+        try:
+            resp = await client.get(f"{SEGMENTATION_SERVICE_URL}/sam3/jobs")
+            if resp.status_code == 200:
+                data = resp.json()
+                jobs = data.get("jobs", []) if isinstance(data, dict) else []
+                for j in jobs:
+                    j["source"] = "sam3"
+                all_jobs.extend(jobs)
+        except Exception:
+            pass
+
+    all_jobs.sort(key=lambda j: j.get("created_at", ""), reverse=True)
+    return {"jobs": all_jobs, "total": len(all_jobs)}
 
 
 @app.get("/ping")
