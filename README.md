@@ -20,13 +20,13 @@ cp .env.example .env
 docker-compose up -d
 
 # Open in browser
-open http://localhost:3000
+open http://localhost:3001
 ```
 
 ## Architecture
 
 ```
-Frontend (Vue 3) :3000
+Frontend (Vue 3) :3001
     |
 Gateway (FastAPI) :8000
     |
@@ -37,6 +37,6 @@ Segmentation (SAM3) :8002
 
 | Service | Port | Description |
 |---------|------|-------------|
-| Frontend | 3000 | Vue 3 + Tailwind CSS |
+| Frontend | 3001 | Vue 3 + Tailwind CSS |
 | Gateway | 8000 | FastAPI API gateway |
 | Segmentation | 8002 | SAM3 segmentation service |

@@ -9,8 +9,16 @@ services:
       - jobs_db:/app/db
       - ./services/gateway/app:/app/app
       - ./services/shared:/app/shared
+      - //c/Users/Alejandro/SynologyDrive/Datasets/Deteccion_Residuos:/app/datasets/Deteccion_Residuos
     command: uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
     environment:
       - SEGMENTATION_SERVICE_URL=${SEGMENTATION_SERVICE_URL:-http://segmentation:8002}
-      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://localhost:5173}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://localhost:5173,http://localhost:3001}
       - ALLOWED_FS_PATHS=${ALLOWED_FS_PATHS:-/app/datasets}
+
+  segmentation:
+    volumes:
+      - checkpoints:/app/checkpoints
+      - datasets:/app/datasets
+      - hf_cache:/root/.cache/huggingface
+      - //c/Users/Alejandro/SynologyDrive/Datasets/Deteccion_Residuos:/app/datasets/Deteccion_Residuos
