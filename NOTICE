@@ -1,0 +1,30 @@
+Annotation Tool
+Copyright Alejandro Sánchez Ferrer
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+It includes or depends on the following third-party components, each under
+its own license:
+
+INSID3 (included)
+  Source: https://github.com/visinf/INSID3
+  Copyright (c) Visual Inference Lab, TU Darmstadt and contributors.
+  License: Apache-2.0. Vendored in services/segmentation/app/insid3/vendor/
+  with the modifications listed in the NOTICE file of that directory.
+
+SAM 3 (not included)
+  Source: https://huggingface.co/facebook/sam3
+  Copyright (c) Meta Platforms, Inc. and affiliates.
+  License: SAM License (Meta). The weights are gated and are downloaded from
+  Hugging Face at runtime with the user's own token.
+
+DINOv3 (not included)
+  Source: https://github.com/facebookresearch/dinov3
+  Copyright (c) Meta Platforms, Inc. and affiliates.
+  License: DINOv3 License (Meta). The weights are not distributed with this
+  repository; the user must download them from Meta.
+
+Datumaro (not included, installed with pip)
+  Source: https://github.com/open-edge-platform/datumaro
+  Copyright (c) Intel Corporation.
+  License: MIT.

@@ -5,5 +5,9 @@ Pytest configuration for Segmentation service tests.
 import sys
 import os
 
-# Ensure app module is importable
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Make `app` (service root) and `shared` (services/shared) importable
+SERVICE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SERVICES_ROOT = os.path.dirname(SERVICE_ROOT)
+for path in (SERVICES_ROOT, SERVICE_ROOT):
+    if path not in sys.path:
+        sys.path.insert(0, path)

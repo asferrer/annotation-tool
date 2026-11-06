@@ -2,20 +2,16 @@
 Labeling Router - Proxy to segmentation service for auto-labeling.
 """
 
-import os
 import logging
 from typing import Dict, List, Optional
 
-import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
+
+from app.proxy import proxy_segmentation as _proxy
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Labeling"], prefix="/labeling")
-
-SEGMENTATION_SERVICE_URL = os.environ.get(
-    "SEGMENTATION_SERVICE_URL", "http://segmentation:8002"
-)
 
 
 # ---------- Schemas ----------
@@ -53,38 +49,17 @@ class RelabelingRequest(BaseModel):
     deduplication_strategy: str = Field(default="confidence")
 
 
-# ---------- Proxy helper ----------
-
-async def _proxy(method: str, path: str, data=None, params=None):
-    url = f"{SEGMENTATION_SERVICE_URL}{path}"
-    try:
-        async with httpx.AsyncClient(timeout=180.0) as client:
-            if method == "GET":
-                resp = await client.get(url, params=params)
-            elif method == "POST":
-                resp = await client.post(url, json=data)
-            elif method == "DELETE":
-                resp = await client.delete(url, params=params)
-            else:
-                raise HTTPException(405, "Method not allowed")
-
-            if resp.status_code >= 400:
-                raise HTTPException(resp.status_code, resp.text)
-            return resp.json()
-    except httpx.RequestError as e:
-        raise HTTPException(503, f"Segmentation service unavailable: {e}")
-
-
 # ---------- Endpoints ----------
 
 @router.post("/start")
 async def start_labeling(request: LabelingStartRequest):
-    return await _proxy("POST", "/labeling/start", request.model_dump())
+    # exclude_none: segmentation schemas use non-null defaults (e.g. new_classes=[])
+    return await _proxy("POST", "/labeling/start", request.model_dump(exclude_none=True))
 
 
 @router.post("/relabel")
 async def start_relabeling(request: RelabelingRequest):
-    return await _proxy("POST", "/labeling/relabel", request.model_dump())
+    return await _proxy("POST", "/labeling/relabel", request.model_dump(exclude_none=True))
 
 
 @router.get("/jobs")
@@ -115,3 +90,13 @@ async def get_partial_annotations(job_id: str):
 @router.delete("/jobs/{job_id}")
 async def cancel_job(job_id: str):
     return await _proxy("DELETE", f"/labeling/jobs/{job_id}")
+
+
+@router.post("/jobs/{job_id}/resume")
+async def resume_job(job_id: str):
+    return await _proxy("POST", f"/labeling/jobs/{job_id}/resume")
+
+
+@router.post("/jobs/{job_id}/delete")
+async def delete_job(job_id: str):
+    return await _proxy("POST", f"/labeling/jobs/{job_id}/delete")

@@ -111,3 +111,72 @@ export interface HealthStatus {
   status: string
   services: Record<string, { status: string }>
 }
+
+// Export engine
+export interface ExportFormatSpec {
+  id: string
+  label: string
+  backend: 'datumaro' | 'native'
+  tasks: string[]
+  supports_import: boolean
+  description: string
+}
+
+export interface ExportJob {
+  id: string
+  job_type: string
+  service: string
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted'
+  output_path?: string
+  error_message?: string
+  result_summary?: Record<string, unknown>
+  created_at?: string
+  completed_at?: string
+}
+
+// Video
+export interface VideoInfo {
+  path: string
+  width: number
+  height: number
+  fps: number
+  frame_count: number
+  duration_s: number
+}
+
+export interface VideoUploadResult {
+  video_id: string
+  video_path: string
+  frames_dir: string
+  size_bytes: number
+  original_name: string
+}
+
+export interface ExtractFramesResult {
+  frames_dir: string
+  extracted_frames: number
+  frame_stride: number
+  effective_fps: number
+  video: VideoInfo
+}
+
+export interface TrackSummary {
+  track_id: number
+  category_id: number
+  label: string
+  frame_count: number
+  first_frame: number
+  last_frame: number
+  avg_score: number
+}
+
+export interface VideoMeta {
+  id: number
+  name: string
+  source_path: string
+  fps: number
+  frame_stride: number
+  frame_count: number
+  width: number
+  height: number
+}

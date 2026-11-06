@@ -74,7 +74,7 @@ class ReannotateRequest(BaseModel):
 class SegmentBboxRequest(BaseModel):
     image_path: str
     bbox: List[float]  # [x, y, w, h] in image coordinates
-    text_hint: Optional[str] = None  # nombre de categoría para mejorar la segmentación
+    text_hint: Optional[str] = None  # category name to improve segmentation
 
 
 class SegmentPointRequest(BaseModel):
@@ -85,12 +85,6 @@ class SegmentPointRequest(BaseModel):
     return_polygon: bool = True
     simplify_polygon: bool = True
     simplify_tolerance: float = 2.0
-
-
-class ExportRequest(BaseModel):
-    coco_json_path: str
-    output_dir: str
-    formats: List[str] = ["coco"]
 
 
 # ---------- Helpers ----------
@@ -121,86 +115,6 @@ async def _read_coco(path: str) -> Dict[str, Any]:
 
 async def _write_coco(path: str, data: Dict[str, Any]):
     await asyncio.to_thread(_write_coco_sync, path, data)
-
-
-def _export_yolo_sync(coco_data: Dict[str, Any], output_dir: Path) -> str:
-    labels_dir = output_dir / "yolo" / "labels"
-    labels_dir.mkdir(parents=True, exist_ok=True)
-
-    image_dims = {img["id"]: (img["width"], img["height"]) for img in coco_data.get("images", [])}
-    image_names = {img["id"]: img["file_name"] for img in coco_data.get("images", [])}
-    categories = coco_data.get("categories", [])
-    cat_map = {c["id"]: i for i, c in enumerate(categories)}
-
-    anns_by_image: Dict[int, list] = {}
-    for ann in coco_data.get("annotations", []):
-        anns_by_image.setdefault(ann["image_id"], []).append(ann)
-
-    for img_id, anns in anns_by_image.items():
-        if img_id not in image_dims:
-            continue
-        w, h = image_dims[img_id]
-        lines = []
-        for ann in anns:
-            bbox = ann.get("bbox", [0, 0, 0, 0])
-            x_center = (bbox[0] + bbox[2] / 2) / w
-            y_center = (bbox[1] + bbox[3] / 2) / h
-            lines.append(
-                f"{cat_map.get(ann['category_id'], 0)} "
-                f"{x_center:.6f} {y_center:.6f} "
-                f"{bbox[2] / w:.6f} {bbox[3] / h:.6f}"
-            )
-        label_file = labels_dir / (Path(image_names[img_id]).stem + ".txt")
-        label_file.write_text("\n".join(lines))
-
-    classes_file = output_dir / "yolo" / "classes.txt"
-    classes_file.write_text("\n".join(c["name"] for c in categories))
-    return str(output_dir / "yolo")
-
-
-def _export_voc_sync(coco_data: Dict[str, Any], output_dir: Path) -> str:
-    annotations_dir = output_dir / "voc" / "Annotations"
-    annotations_dir.mkdir(parents=True, exist_ok=True)
-
-    image_info = {img["id"]: img for img in coco_data.get("images", [])}
-    cat_names = {c["id"]: c["name"] for c in coco_data.get("categories", [])}
-
-    anns_by_image: Dict[int, list] = {}
-    for ann in coco_data.get("annotations", []):
-        anns_by_image.setdefault(ann["image_id"], []).append(ann)
-
-    for img_id, anns in anns_by_image.items():
-        if img_id not in image_info:
-            continue
-        img = image_info[img_id]
-        xml_lines = [
-            '<?xml version="1.0" encoding="UTF-8"?>',
-            "<annotation>",
-            f'  <filename>{img["file_name"]}</filename>',
-            "  <size>",
-            f'    <width>{img["width"]}</width>',
-            f'    <height>{img["height"]}</height>',
-            "    <depth>3</depth>",
-            "  </size>",
-        ]
-        for ann in anns:
-            bbox = ann.get("bbox", [0, 0, 0, 0])
-            xml_lines += [
-                "  <object>",
-                f'    <name>{cat_names.get(ann["category_id"], "unknown")}</name>',
-                "    <bndbox>",
-                f'      <xmin>{int(bbox[0])}</xmin>',
-                f'      <ymin>{int(bbox[1])}</ymin>',
-                f'      <xmax>{int(bbox[0] + bbox[2])}</xmax>',
-                f'      <ymax>{int(bbox[1] + bbox[3])}</ymax>',
-                "    </bndbox>",
-                "  </object>",
-            ]
-        xml_lines.append("</annotation>")
-        xml_file = annotations_dir / (Path(img["file_name"]).stem + ".xml")
-        xml_file.write_text("\n".join(xml_lines))
-
-    return str(output_dir / "voc")
 
 
 # ---------- Endpoints ----------
@@ -465,28 +379,5 @@ async def segment_text(request: SegmentTextRequest):
         return {"success": False, "segmentation_coco": None, "bbox": None, "confidence": 0.0}
 
 
-@router.post("/export")
-async def export_annotations(request: ExportRequest):
-    """Export COCO JSON to one or more formats (coco, yolo, voc)."""
-    valid_formats = {"coco", "yolo", "voc"}
-    requested = [f.lower() for f in request.formats]
-    unknown = set(requested) - valid_formats
-    if unknown:
-        raise HTTPException(400, f"Unknown formats: {unknown}. Supported: {valid_formats}")
-
-    data = await _read_coco(request.coco_json_path)
-    output_dir = Path(request.output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    output_files: Dict[str, str] = {}
-
-    if "coco" in requested:
-        output_files["coco"] = request.coco_json_path
-
-    if "yolo" in requested:
-        output_files["yolo"] = await asyncio.to_thread(_export_yolo_sync, data, output_dir)
-
-    if "voc" in requested:
-        output_files["voc"] = await asyncio.to_thread(_export_voc_sync, data, output_dir)
-
-    return {"success": True, "output_files": output_files}
+# NOTE: POST /annotations/export was replaced by the multi-format engine at
+# POST /export/start (see app/routers/export.py).

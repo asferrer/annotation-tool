@@ -1,3 +1,4 @@
 # Test dependencies for Segmentation service
-pytest>=7.0.0
-pytest-asyncio>=0.21.0
+pytest==8.3.5
+pytest-asyncio==0.25.3
+httpx==0.28.1

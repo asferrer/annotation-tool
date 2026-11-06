@@ -83,9 +83,29 @@ export async function getPartialAnnotations(jobId: string) {
   return data
 }
 
-export async function exportAnnotations(request: { coco_json_path: string; output_dir: string; formats: string[] }) {
-  const { data } = await api.post('/annotations/export', request)
-  return data
+// Export engine (multi-format, Datumaro-backed)
+export async function getExportFormats() {
+  const { data } = await api.get('/export/formats')
+  return data as import('@/types/api').ExportFormatSpec[]
+}
+
+export async function startExport(request: { coco_json_path: string; format: string; include_images?: boolean; images_dir?: string | null }) {
+  const { data } = await api.post('/export/start', request)
+  return data as { job_id: string; status: string }
+}
+
+export async function getExportJob(jobId: string) {
+  const { data } = await api.get(`/export/jobs/${jobId}`)
+  return data as import('@/types/api').ExportJob
+}
+
+export function getExportDownloadUrl(jobId: string): string {
+  return `/api/export/jobs/${jobId}/download`
+}
+
+export async function startImport(request: { input_path: string; format: string; task_name: string }) {
+  const { data } = await api.post('/import/start', request)
+  return data as { job_id: string; status: string }
 }
 
 // SAM3
@@ -238,6 +258,87 @@ export async function evaluateComparison(request: {
 // Jobs
 export async function getAllJobs() {
   const { data } = await api.get('/jobs')
+  return data
+}
+
+// Video
+export async function uploadVideo(file: File, onProgress?: (percent: number) => void) {
+  const formData = new FormData()
+  formData.append('file', file)
+  const { data } = await api.post('/videos/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 0,
+    onUploadProgress: (e) => {
+      if (onProgress && e.total) onProgress(Math.round((e.loaded / e.total) * 100))
+    },
+  })
+  return data as import('@/types/api').VideoUploadResult
+}
+
+export async function probeVideo(videoPath: string) {
+  const { data } = await api.post('/videos/probe', { video_path: videoPath })
+  return data as import('@/types/api').VideoInfo
+}
+
+export async function extractFrames(request: { video_path: string; target_fps?: number; frame_stride?: number; max_frames?: number; output_dir?: string }) {
+  const { data } = await api.post('/videos/extract-frames', request, { timeout: 600000 })
+  return data as import('@/types/api').ExtractFramesResult
+}
+
+export async function startTracking(request: { frames_dir: string; prompts: string[]; min_confidence?: number; output_json: string; video_name?: string; source_video_path?: string; fps?: number; frame_stride?: number }) {
+  const { data } = await api.post('/videos/track', request)
+  return data as { success: boolean; job_id: string; status: string; total_frames: number }
+}
+
+export async function getVideoJob(jobId: string) {
+  const { data } = await api.get(`/videos/jobs/${jobId}`)
+  return data as import('@/types/api').ExportJob & { processed_items?: number; total_items?: number }
+}
+
+export async function cancelVideoJob(jobId: string) {
+  const { data } = await api.delete(`/videos/jobs/${jobId}`)
+  return data
+}
+
+// Tracks
+export async function getTracks(cocoJsonPath: string) {
+  const { data } = await api.get('/tracks', { params: { coco_json_path: cocoJsonPath } })
+  return data as { tracks: import('@/types/api').TrackSummary[]; total: number; videos: import('@/types/api').VideoMeta[] }
+}
+
+export async function renameTrack(cocoJsonPath: string, trackId: number, newLabel: string) {
+  const { data } = await api.post('/tracks/rename', { coco_json_path: cocoJsonPath, track_id: trackId, new_label: newLabel })
+  return data
+}
+
+export async function deleteTrack(cocoJsonPath: string, trackId: number) {
+  const { data } = await api.post('/tracks/delete', { coco_json_path: cocoJsonPath, track_id: trackId })
+  return data
+}
+
+export async function mergeTracks(cocoJsonPath: string, sourceTrackId: number, targetTrackId: number) {
+  const { data } = await api.post('/tracks/merge', { coco_json_path: cocoJsonPath, source_track_id: sourceTrackId, target_track_id: targetTrackId })
+  return data
+}
+
+// INSID3 propagation (one annotated example -> whole dataset)
+export async function getPropagateStatus() {
+  const { data } = await api.get('/propagate/status')
+  return data as { insid3: { model_size: string; weights_path: string; weights_present: boolean; instructions: string | null } }
+}
+
+export async function startPropagation(request: { reference_image_path: string; reference_polygon: number[][]; target_directory: string; label: string; merge_threshold?: number; min_area?: number; output_json: string; max_images?: number }) {
+  const { data } = await api.post('/propagate/start', request)
+  return data as { success: boolean; job_id: string; status: string }
+}
+
+export async function getPropagateJob(jobId: string) {
+  const { data } = await api.get(`/propagate/jobs/${jobId}`)
+  return data as import('@/types/api').ExportJob & { processed_items?: number; total_items?: number }
+}
+
+export async function cancelPropagateJob(jobId: string) {
+  const { data } = await api.delete(`/propagate/jobs/${jobId}`)
   return data
 }
 

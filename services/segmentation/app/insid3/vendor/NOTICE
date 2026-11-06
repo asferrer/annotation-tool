@@ -1,0 +1,12 @@
+INSID3 — Training-Free In-Context Segmentation with DINOv3
+Copyright (c) Visual Inference Lab, TU Darmstadt and contributors.
+
+This directory contains code vendored from https://github.com/visinf/INSID3
+(Apache License 2.0; see LICENSE). Modifications:
+- insid3_model.py (upstream models/insid3.py): imports rewritten to be relative
+  to this package.
+
+The DINOv3 encoder weights required at runtime are distributed separately by
+Meta under the DINOv3 License and must be downloaded manually.
+- insid3_model.py: einops.rearrange calls replaced with equivalent plain torch
+  ops (reshape/permute) to drop the einops dependency.

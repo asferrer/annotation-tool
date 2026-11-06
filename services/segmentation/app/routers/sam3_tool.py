@@ -2,13 +2,11 @@
 SAM3 tool endpoints: image segmentation and dataset conversion.
 """
 
-import os
 import json
 import time
 import logging
 import asyncio
 import uuid
-import gc
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 from datetime import datetime
@@ -27,7 +25,6 @@ from app.models.extraction_schemas import (
 )
 from app.service_state import (
     state, sam3_conversion_jobs, wait_for_sam3,
-    thread_pool, VRAM_MONITOR_AVAILABLE, VRAMMonitor,
 )
 
 logger = logging.getLogger(__name__)
@@ -57,7 +54,7 @@ async def sam3_segment_image(request: SAM3SegmentImageRequest):
     start_time = time.time()
 
     # Wait for SAM3 if still loading
-    if state.sam3_loading:
+    if not state.sam3_available:
         logger.info("Waiting for SAM3 to load for image segmentation...")
         await wait_for_sam3(timeout=60.0)
 
@@ -100,7 +97,7 @@ async def sam3_segment_image(request: SAM3SegmentImageRequest):
             x, y, bw, bh = request.bbox
             input_box = [[x, y, x + bw, y + bh]]  # xywh → xyxy
             if request.text_prompt:
-                # Modo combinado texto+bbox: mejor calidad cuando se conoce la categoría
+                # Combined text+bbox mode: better quality when the category is known
                 inputs = state.sam3_processor(
                     images=pil_image,
                     text=request.text_prompt,
@@ -600,7 +597,7 @@ async def get_sam3_conversion_job_status(job_id: str):
 
 
 # ---------------------------------------------------------------------------
-# Endpoint: segmentación interactiva por puntos (Sam3TrackerModel)
+# Endpoint: interactive point-based segmentation (Sam3TrackerModel)
 # ---------------------------------------------------------------------------
 
 class SegmentPointRequest(BaseModel):
@@ -624,7 +621,7 @@ async def sam3_segment_point(request: SegmentPointRequest):
     """
     start_time = time.time()
 
-    if state.sam3_loading:
+    if not state.sam3_available:
         await wait_for_sam3(timeout=60.0)
 
     if not state.sam3_available:

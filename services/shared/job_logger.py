@@ -48,8 +48,7 @@ class JobLogger:
                 details=details
             )
         except Exception as e:
-            # Don't fail silently, at least print the error
-            print(f"[JobLogger] Failed to write to database: {e}")
+            logging.getLogger(__name__).error("Failed to write job log to database: %s", e)
 
         # Also print to console if enabled
         if self.also_print:

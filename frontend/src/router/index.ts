@@ -26,6 +26,12 @@ const routes = [
     meta: { title: 'Auto Labeling' },
   },
   {
+    path: '/video',
+    name: 'video',
+    component: () => import('@/views/VideoAnnotateView.vue'),
+    meta: { title: 'Video Annotation' },
+  },
+  {
     path: '/annotation-review',
     name: 'annotation-review',
     component: () => import('@/views/AnnotationReviewView.vue'),

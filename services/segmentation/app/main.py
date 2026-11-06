@@ -23,7 +23,7 @@ from app.service_state import (
     state, init_gpu, init_sam3_background, _load_sam3_sync,
     JOB_DATABASE_AVAILABLE, get_job_db,
 )
-from app.routers import analysis, extraction, sam3_tool, labeling
+from app.routers import analysis, extraction, sam3_tool, labeling, video, propagate
 
 # Configure logging
 logging.basicConfig(
@@ -93,7 +93,7 @@ app = FastAPI(
 # CORS middleware
 ALLOWED_ORIGINS = [
     o.strip() for o in
-    os.environ.get("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173,http://gateway:8000").split(",")
+    os.environ.get("CORS_ORIGINS", "http://localhost:3001,http://localhost:5173,http://gateway:8000").split(",")
 ]
 
 app.add_middleware(
@@ -109,6 +109,8 @@ app.include_router(analysis.router, tags=["Analysis"])
 app.include_router(extraction.router, tags=["Object Extraction"])
 app.include_router(sam3_tool.router, tags=["SAM3 Tool"])
 app.include_router(labeling.router, tags=["Labeling Tool"])
+app.include_router(video.router, tags=["Video"])
+app.include_router(propagate.router, tags=["Propagation"])
 
 
 # ---------------------------------------------------------------------------

@@ -17,6 +17,7 @@ services:
       - "8000:8000"
     environment:
       - SEGMENTATION_SERVICE_URL=http://segmentation:8002
+      - JOBS_DB_PATH=/app/db/jobs.db
     volumes:
       - datasets:/app/datasets
       - jobs_db:/app/db
@@ -39,10 +40,16 @@ services:
       - "8002:8002"
     environment:
       - HF_TOKEN=${HF_TOKEN:-}
+      - JOBS_DB_PATH=/app/db/jobs.db
       - SAM3_MODEL_ID=${SAM3_MODEL_ID:-facebook/sam3}
       - SAM3_FP32=${SAM3_FP32:-false}
       - SAM3_LAZY_LOAD=${SAM3_LAZY_LOAD:-true}
       - LABELING_COOLDOWN_MS=${LABELING_COOLDOWN_MS:-200}
+      # Max frames extracted per video (disk + tracking session bound)
+      - VIDEO_MAX_FRAMES=${VIDEO_MAX_FRAMES:-3000}
+      # INSID3: DINOv3 weights (gated by Meta, download manually into the checkpoints volume)
+      - DINOV3_WEIGHTS_DIR=${DINOV3_WEIGHTS_DIR:-/app/checkpoints/dinov3}
+      - INSID3_MODEL_SIZE=${INSID3_MODEL_SIZE:-large}
       # Cooldown between class inferences within a single image (prevents GPU overheating).
       # Increase if GPU fans saturate or PC shuts down. Set to 0 to disable.
       - INTER_CLASS_COOLDOWN_MS=${INTER_CLASS_COOLDOWN_MS:-300}
@@ -50,6 +57,7 @@ services:
     volumes:
       - checkpoints:/app/checkpoints
       - datasets:/app/datasets
+      - jobs_db:/app/db
       - hf_cache:/root/.cache/huggingface
     deploy:
       resources:

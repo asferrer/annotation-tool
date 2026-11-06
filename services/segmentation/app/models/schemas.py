@@ -5,7 +5,7 @@ Pydantic models for segmentation API.
 """
 
 from pydantic import BaseModel, Field
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional
 from enum import Enum
 
 
@@ -109,7 +109,7 @@ class HealthResponse(BaseModel):
     sam3_loading: bool = False  # True while SAM3 is being loaded in background
     sam3_load_progress: str = ""  # Progress message during loading
     sam3_load_error: Optional[str] = None  # Error message if loading failed
-    sam3_model_id: Optional[str] = None   # ID del modelo cargado
+    sam3_model_id: Optional[str] = None   # ID of the loaded model
     gpu_available: bool
     model_loaded: bool
     version: str = "1.0.0"

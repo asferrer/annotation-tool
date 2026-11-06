@@ -8,12 +8,13 @@ import BaseButton from '@/components/ui/BaseButton.vue'
 import AlertBox from '@/components/common/AlertBox.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import DirectoryBrowser from '@/components/common/DirectoryBrowser.vue'
+import ExportDialog from '@/components/export/ExportDialog.vue'
 import {
   FolderOpen, Save, ZoomIn, ZoomOut, Maximize2,
   Eye, EyeOff, Tag, Trash2, Search, ImageIcon,
   AlertCircle, CheckCircle2, MousePointer2,
   Square, Hand, Undo2, Redo2, ChevronLeft, ChevronRight,
-  Wand2, Plus, X, Loader2, FolderOpen as FolderIcon, Layers, Upload, HardDrive,
+  Wand2, Plus, X, Loader2, FolderOpen as FolderIcon, Layers, Download, Upload, HardDrive,
 } from 'lucide-vue-next'
 
 // ---------------------------------------------------------------------------
@@ -65,6 +66,18 @@ const autoLabelProgress = ref(0)
 const autoLabelStatus = ref('')
 const autoLabelJobId = ref<string | null>(null)
 let autoLabelPollTimer: ReturnType<typeof setInterval> | null = null
+
+// ---------------------------------------------------------------------------
+// Export
+// ---------------------------------------------------------------------------
+const showExport = ref(false)
+
+async function openExport() {
+  if (editor.hasUnsavedChanges.value) {
+    await handleSave()
+  }
+  if (cocoJsonPath.value) showExport.value = true
+}
 
 // ---------------------------------------------------------------------------
 // Navigator
@@ -783,6 +796,11 @@ function formatBbox(bbox: [number, number, number, number]): string {
           <Save class="h-3.5 w-3.5" /> Save
         </BaseButton>
 
+        <!-- Export -->
+        <BaseButton variant="outline" size="sm" :disabled="!cocoJsonPath" @click="openExport">
+          <Download class="h-3.5 w-3.5" /> Export
+        </BaseButton>
+
         <div class="w-px h-5 bg-gray-700 mx-0.5" />
 
         <!-- Zoom -->
@@ -998,5 +1016,12 @@ function formatBbox(bbox: [number, number, number, number]): string {
         </div>
       </div>
     </template>
+
+    <ExportDialog
+      :open="showExport"
+      :coco-json-path="cocoJsonPath"
+      :images-dir="imagesDirPath || undefined"
+      @close="showExport = false"
+    />
   </div>
 </template>

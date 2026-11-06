@@ -6,7 +6,6 @@ import os
 import time
 import logging
 from pathlib import Path
-from typing import Optional
 
 import cv2
 import numpy as np
@@ -270,7 +269,7 @@ async def segment_text(request: SegmentTextRequest):
     start_time = time.time()
 
     # Wait for SAM3 if still loading
-    if state.sam3_loading:
+    if not state.sam3_available:
         logger.info("Waiting for SAM3 to load for text segmentation...")
         await wait_for_sam3(timeout=60.0)
 

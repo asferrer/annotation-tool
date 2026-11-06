@@ -13,17 +13,18 @@ const uiStore = useUiStore()
 
 const gtPath = ref('')
 const predPath = ref('')
+const iouThreshold = ref(0.5)
+const loading = ref(false)
+const error = ref<string | null>(null)
+const results = ref<any>(null)
 
+// Pre-fill paths when navigating from the Jobs view (?pred_path=...&gt_path=...)
 onMounted(() => {
   const qPred = route.query.pred_path as string | undefined
   const qGt = route.query.gt_path as string | undefined
   if (qPred) predPath.value = qPred
   if (qGt) gtPath.value = qGt
 })
-const iouThreshold = ref(0.5)
-const loading = ref(false)
-const error = ref<string | null>(null)
-const results = ref<any>(null)
 
 async function runEvaluation() {
   if (!gtPath.value || !predPath.value) {

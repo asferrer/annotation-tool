@@ -3,4 +3,5 @@ uvicorn[standard]==0.27.1
 httpx==0.27.0
 pydantic==2.6.1
 python-multipart==0.0.9
-Pillow>=10.0.0
+Pillow==11.3.0
+datumaro==1.13.3

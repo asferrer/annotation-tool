@@ -9,10 +9,8 @@ import sys
 import time
 import asyncio
 import logging
-import gc
 import base64
 from typing import Optional, Dict, Any, List
-from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 
 import cv2
@@ -20,8 +18,6 @@ import numpy as np
 
 from app.scene_analyzer import SemanticSceneAnalyzer
 from app.object_extractor import ObjectExtractor
-from app.prompt_optimizer import PromptOptimizer, get_prompt_optimizer
-from app.detection_validator import DetectionValidator, get_detection_validator, deduplicate_annotations
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +59,7 @@ class ServiceState:
     debug_scene_analyzer = None
     sam3_model = None
     sam3_processor = None
-    sam3_tracker_model = None      # Sam3TrackerModel para segmentación interactiva por puntos
+    sam3_tracker_model = None      # Sam3TrackerModel for interactive point-based segmentation
     sam3_tracker_processor = None  # Sam3TrackerProcessor
     device: str = "cpu"
     sam3_available: bool = False
@@ -282,12 +278,28 @@ async def init_sam3_background():
     await loop.run_in_executor(thread_pool, _load_sam3_sync)
 
 
+def _reacquire_sam3_via_manager() -> None:
+    """Swap SAM3 back into VRAM after another engine (video/insid3) used the GPU."""
+    from app.model_manager import manager, ModelBusyError  # late import (avoids cycle)
+    try:
+        manager.acquire("sam3")
+        manager.release("sam3")
+    except ModelBusyError as e:
+        logger.warning(f"Cannot reload SAM3: {e}")
+    except Exception as e:
+        logger.warning(f"SAM3 reload via ModelManager failed: {e}")
+
+
 async def wait_for_sam3(timeout: float = 300.0) -> bool:
-    """Wait for SAM3 to finish loading."""
+    """Wait for SAM3 to finish loading, reloading it if it was swapped out."""
     if state.sam3_available:
         return True
     if not state.sam3_loading:
-        return False
+        if state.sam3_load_error:
+            return False
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(thread_pool, _reacquire_sam3_via_manager)
+        return state.sam3_available
     start = time.time()
     while state.sam3_loading and (time.time() - start) < timeout:
         await asyncio.sleep(0.5)

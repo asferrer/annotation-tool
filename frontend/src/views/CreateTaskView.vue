@@ -3,7 +3,8 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTaskStore, type TaskLabel } from '@/stores/task'
 import { useUiStore } from '@/stores/ui'
-import { uploadImages, uploadCocoJson } from '@/lib/api'
+import { uploadImages, uploadCocoJson, getExportFormats, startImport, getExportJob } from '@/lib/api'
+import type { ExportFormatSpec } from '@/types/api'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import DirectoryBrowser from '@/components/common/DirectoryBrowser.vue'
@@ -17,7 +18,7 @@ const uiStore = useUiStore()
 const taskName = ref('')
 
 // Data source mode: 'upload' (from PC) or 'volume' (Docker volume)
-const sourceMode = ref<'upload' | 'volume'>('upload')
+const sourceMode = ref<'upload' | 'volume' | 'import'>('upload')
 
 // Volume mode
 const imagesDirPath = ref('')
@@ -146,8 +147,55 @@ function removeLabel(id: number) {
 // ---------------------------------------------------------------------------
 const canStart = computed(() => {
   if (sourceMode.value === 'upload') return selectedFiles.value.length > 0
+  if (sourceMode.value === 'import') return importPath.value.trim() !== '' && importFormat.value !== ''
   return imagesDirPath.value.trim() !== ''
 })
+
+// ---------------------------------------------------------------------------
+// Import from other formats (Datumaro engine)
+// ---------------------------------------------------------------------------
+const importPath = ref('')
+const importFormat = ref('coco')
+const importFormats = ref<ExportFormatSpec[]>([])
+const isImporting = ref(false)
+
+async function loadImportFormats() {
+  if (importFormats.value.length > 0) return
+  try {
+    importFormats.value = (await getExportFormats()).filter((f) => f.supports_import)
+  } catch {
+    uiStore.showError('Import', 'Could not load import formats')
+  }
+}
+
+async function runImport(name: string): Promise<string | null> {
+  isImporting.value = true
+  try {
+    const { job_id } = await startImport({
+      input_path: importPath.value.trim(),
+      format: importFormat.value,
+      task_name: name,
+    })
+    // Poll until the conversion job finishes
+    for (;;) {
+      await new Promise((r) => setTimeout(r, 1500))
+      const job = await getExportJob(job_id)
+      if (job.status === 'completed') {
+        const summary = (job.result_summary ?? {}) as { coco_json_path?: string }
+        return summary.coco_json_path ?? job.output_path ?? null
+      }
+      if (['failed', 'cancelled', 'interrupted'].includes(job.status)) {
+        uiStore.showError('Import failed', job.error_message || 'Conversion error')
+        return null
+      }
+    }
+  } catch (err: any) {
+    uiStore.showError('Import failed', err?.response?.data?.detail ?? err?.message ?? 'Error')
+    return null
+  } finally {
+    isImporting.value = false
+  }
+}
 
 async function startAnnotation() {
   if (!canStart.value) return
@@ -182,6 +230,12 @@ async function startAnnotation() {
     } finally {
       isUploading.value = false
     }
+  } else if (sourceMode.value === 'import') {
+    const imported = await runImport(name)
+    if (!imported) return
+    cocoPath = imported
+    imgDir = imported.replace(/\/annotations\/[^/]+$/, '/images')
+    uiStore.showSuccess('Import complete', 'Dataset converted to COCO')
   } else {
     imgDir = imagesDirPath.value.trim()
     cocoPath = useExistingCoco.value ? cocoJsonPath.value.trim() : ''
@@ -217,6 +271,9 @@ async function startAnnotation() {
         </button>
         <button @click="sourceMode = 'volume'" :class="['flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors', sourceMode === 'volume' ? 'bg-primary text-white' : 'text-gray-400 hover:text-white']">
           <HardDrive class="h-4 w-4" /> Server Directory
+        </button>
+        <button @click="sourceMode = 'import'; loadImportFormats()" :class="['flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors', sourceMode === 'import' ? 'bg-primary text-white' : 'text-gray-400 hover:text-white']">
+          <FileJson class="h-4 w-4" /> Import Format
         </button>
       </div>
 
@@ -312,6 +369,22 @@ async function startAnnotation() {
 
         <DirectoryBrowser v-if="useExistingCoco" v-model="cocoJsonPath" label="COCO JSON file" placeholder="/app/datasets/annotations.json" :show-files="true" file-pattern="*.json" path-mode="input" :restrict-to-mounts="false" />
       </template>
+
+      <!-- IMPORT MODE -->
+      <template v-if="sourceMode === 'import'">
+        <div>
+          <label class="text-sm text-gray-400 mb-1 block">Source format</label>
+          <select v-model="importFormat" class="w-full bg-background-tertiary border border-gray-600 rounded-lg px-3 py-2 text-white text-sm">
+            <option v-for="f in importFormats" :key="f.id" :value="f.id">{{ f.label }}</option>
+          </select>
+          <p class="text-xs text-gray-500 mt-1">{{ importFormats.find(f => f.id === importFormat)?.description }}</p>
+        </div>
+        <DirectoryBrowser v-model="importPath" label="Dataset root directory" placeholder="/app/datasets/my-yolo-dataset" :show-files="false" path-mode="input" :restrict-to-mounts="false" />
+        <p class="text-xs text-gray-500">The dataset will be converted to COCO into the datasets volume before annotating.</p>
+        <div v-if="isImporting" class="flex items-center gap-2 text-sm text-gray-300">
+          <Loader2 class="h-4 w-4 animate-spin text-primary" /> Converting dataset...
+        </div>
+      </template>
     </div>
 
     <!-- Labels -->
@@ -336,7 +409,7 @@ async function startAnnotation() {
     <!-- Start -->
     <div class="flex justify-end gap-3 pb-8">
       <BaseButton @click="router.push('/')" variant="outline">Cancel</BaseButton>
-      <BaseButton @click="startAnnotation" :disabled="!canStart || isUploading" :loading="isUploading" variant="primary" size="lg">
+      <BaseButton @click="startAnnotation" :disabled="!canStart || isUploading || isImporting" :loading="isUploading || isImporting" variant="primary" size="lg">
         <Play class="h-4 w-4" /> Start Annotating
       </BaseButton>
     </div>

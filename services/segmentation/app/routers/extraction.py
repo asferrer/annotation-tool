@@ -10,7 +10,7 @@ import asyncio
 import uuid
 import base64
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
 from datetime import datetime
 
 import cv2

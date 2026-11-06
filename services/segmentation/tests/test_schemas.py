@@ -270,3 +270,14 @@ class TestPlacementDecisionInfo:
         assert info.object_class == "fish"
         assert info.decision == "accepted"
         assert info.compatibility_score == 0.9
+
+
+class TestLabelingJobStatus:
+    def test_image_directories_default_and_value(self):
+        from app.models.extraction_schemas import LabelingJobStatus
+
+        assert LabelingJobStatus(job_id="j1", status="completed").image_directories == []
+        job = LabelingJobStatus(
+            job_id="j1", status="completed", image_directories=["/app/datasets/images"]
+        )
+        assert job.image_directories == ["/app/datasets/images"]

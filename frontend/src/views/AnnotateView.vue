@@ -5,7 +5,9 @@ import { useI18n } from 'vue-i18n'
 import { useUiStore } from '@/stores/ui'
 import { useTaskStore } from '@/stores/task'
 import { useSettingsStore } from '@/stores/settings'
-import { loadAnnotations, saveAnnotations, getImageUrl, scanImages, startLabeling, getLabelingJobStatus, getHealthStatus, getPartialAnnotations, exportAnnotations, segmentBbox, segmentPoint, segmentWithText } from '@/lib/api'
+import { loadAnnotations, saveAnnotations, getImageUrl, scanImages, startLabeling, getLabelingJobStatus, getHealthStatus, getPartialAnnotations, segmentBbox, segmentPoint, segmentWithText } from '@/lib/api'
+import ExportDialog from '@/components/export/ExportDialog.vue'
+import PropagateDialog from '@/components/annotate/PropagateDialog.vue'
 import { useAnnotationEditor } from '@/composables/useAnnotationEditor'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import {
@@ -15,7 +17,7 @@ import {
   Square, Hand, Undo2, Redo2, ChevronLeft, ChevronRight,
   Wand2, Plus, X, Download, ArrowLeft,
   SkipBack, SkipForward, Search, Layers, Loader2, List, Crosshair,
-  ChevronUp, ChevronDown,
+  ChevronUp, ChevronDown, Share2,
 } from 'lucide-vue-next'
 
 const router = useRouter()
@@ -100,8 +102,16 @@ const sam3Error = ref('')
 
 // Export
 const showExport = ref(false)
-const exportFormat = ref('coco')
-const isExporting = ref(false)
+const showPropagate = ref(false)
+
+const propagateDefaults = computed(() => {
+  const ann = editor.selectedAnnotation.value
+  const cat = ann ? categories.value.find((c) => c.id === ann.category_id) : null
+  return {
+    polygon: ann?.segmentation ?? [],
+    label: cat?.name ?? '',
+  }
+})
 
 // Category popup after drawing bbox
 const pendingBbox = ref<{ x: number; y: number; w: number; h: number } | null>(null)
@@ -615,34 +625,12 @@ async function confirmBboxCategory(catId: number) {
 // ---------------------------------------------------------------------------
 // Export
 // ---------------------------------------------------------------------------
-async function handleExport() {
-  isExporting.value = true
-  try {
-    // Save COCO first
-    const saved = await handleSave()
-    if (!saved) return
-    if (!cocoJsonPath.value) { uiStore.showError('Error', 'No save path'); return }
-    const outputDir = cocoJsonPath.value.replace(/\/[^/]+$/, '')
-    const formats = [exportFormat.value]
-    if (exportFormat.value === 'all') {
-      formats.length = 0; formats.push('coco', 'yolo', 'voc')
-    }
-    if (formats.includes('yolo') || formats.includes('voc')) {
-      const result = await exportAnnotations({ coco_json_path: cocoJsonPath.value, output_dir: outputDir, formats })
-      if (result.success) {
-        const fmtList = Object.keys(result.output_files || {}).join(', ').toUpperCase()
-        uiStore.showSuccess('Exported', `Saved as ${fmtList}`)
-      } else {
-        uiStore.showError('Export failed', result.error || 'Unknown error')
-      }
-    } else {
-      uiStore.showSuccess('Exported', `Saved as COCO JSON`)
-    }
-  } catch (err: any) {
-    uiStore.showError('Export failed', err?.message ?? 'Error')
-  } finally {
-    isExporting.value = false; showExport.value = false
-  }
+async function openExport() {
+  // Save COCO first so the export reflects the latest edits
+  const saved = await handleSave()
+  if (!saved) return
+  if (!cocoJsonPath.value) { uiStore.showError('Error', 'No save path'); return }
+  showExport.value = true
 }
 
 // ---------------------------------------------------------------------------
@@ -1043,8 +1031,8 @@ onUnmounted(() => {
 
       <div class="w-px h-5 bg-gray-700 ml-1 flex-shrink-0" />
 
-      <button @click="toggleLanguage" class="p-1.5 text-gray-400 hover:text-white flex-shrink-0 text-xs font-medium w-7 text-center" :title="locale === 'en' ? 'Switch to Spanish' : 'Cambiar a inglés'">{{ locale === 'en' ? 'ES' : 'EN' }}</button>
-      <button @click="showExport = true" class="p-1.5 text-gray-400 hover:text-white flex-shrink-0" :title="t('annotate.export', 'Export')"><Download class="h-4 w-4" /></button>
+      <button @click="toggleLanguage" class="p-1.5 text-gray-400 hover:text-white flex-shrink-0 text-xs font-medium w-7 text-center" :title="locale === 'en' ? 'Switch to Spanish' : 'Switch to English'">{{ locale === 'en' ? 'ES' : 'EN' }}</button>
+      <button @click="openExport" class="p-1.5 text-gray-400 hover:text-white flex-shrink-0" :title="t('annotate.export', 'Export')"><Download class="h-4 w-4" /></button>
 
       <button @click="showRightPanel = !showRightPanel" :class="['p-1.5 flex-shrink-0', showRightPanel ? 'text-primary' : 'text-gray-400 hover:text-white']" title="Toggle panel">
         <ChevronRight v-if="showRightPanel" class="h-4 w-4" />
@@ -1231,22 +1219,22 @@ onUnmounted(() => {
           <span class="text-purple-300">SAM3</span>
           <!-- Idle: no points yet -->
           <template v-if="pointClickPoints.length === 0 && !isPointSegmenting">
-            <span class="text-gray-500">· click para segmentar · shift+click = fondo</span>
+            <span class="text-gray-500">· click to segment · shift+click = background</span>
           </template>
           <!-- Segmenting in progress -->
           <template v-else-if="isPointSegmenting">
-            <span class="text-purple-400 animate-pulse">· segmentando…</span>
+            <span class="text-purple-400 animate-pulse">· segmenting…</span>
           </template>
           <!-- 1 point: preview ready, offer refinement -->
           <template v-else-if="pointClickPoints.length === 1 && pointClickPreviewBbox">
-            <span class="text-gray-400">· 1 punto</span>
-            <span class="text-green-400">· click para refinar · Enter para confirmar</span>
+            <span class="text-gray-400">· 1 point</span>
+            <span class="text-green-400">· click to refine · Enter to confirm</span>
           </template>
           <!-- Multi-point: show counters and confirm hint -->
           <template v-else-if="pointClickPoints.length > 1">
-            <span class="text-gray-400">· {{ pointClickPoints.filter(p => p.label === 1).length }} frente / {{ pointClickPoints.filter(p => p.label === 0).length }} fondo</span>
-            <span v-if="pointClickPreviewBbox" class="text-green-400">· Enter para confirmar</span>
-            <span v-else class="text-purple-400 animate-pulse">· procesando…</span>
+            <span class="text-gray-400">· {{ pointClickPoints.filter(p => p.label === 1).length }} foreground / {{ pointClickPoints.filter(p => p.label === 0).length }} background</span>
+            <span v-if="pointClickPreviewBbox" class="text-green-400">· Enter to confirm</span>
+            <span v-else class="text-purple-400 animate-pulse">· processing…</span>
           </template>
         </div>
 
@@ -1398,6 +1386,11 @@ onUnmounted(() => {
               <Loader2 v-if="isSegmenting" class="h-3 w-3 animate-spin" /><Wand2 v-else class="h-3 w-3" />
               {{ isSegmenting ? t('annotate.segmenting') : t('annotate.resegment') }}
             </button>
+            <!-- Propagate to dataset (INSID3) -->
+            <button v-if="editor.selectedAnnotation.value.segmentation?.length" @click="showPropagate = true"
+              class="w-full text-xs py-1.5 rounded border border-teal-800/60 bg-teal-900/30 text-teal-300 hover:bg-teal-900/50 flex items-center justify-center gap-1.5 transition-colors">
+              <Share2 class="h-3 w-3" /> {{ t('annotate.propagate', 'Propagate to dataset') }}
+            </button>
             <p class="text-xs text-gray-600">{{ Math.round(editor.selectedAnnotation.value.bbox[2]) }}×{{ Math.round(editor.selectedAnnotation.value.bbox[3]) }}px · {{ Math.round(editor.selectedAnnotation.value.area) }}px²</p>
             <p v-if="editor.selectedAnnotation.value.segmentation?.length" class="text-xs text-purple-400 flex items-center gap-1"><Layers class="h-3 w-3" /> {{ editor.selectedAnnotation.value.segmentation.length }} {{ t('annotate.hasPolygons') }}</p>
           </div>
@@ -1439,7 +1432,7 @@ onUnmounted(() => {
 
             <!-- ── Text-prompt segmentation ── -->
             <div class="space-y-1.5">
-              <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Segmentar por texto</p>
+              <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Segment by text</p>
               <div class="flex gap-1">
                 <input
                   v-model="textPromptInput"
@@ -1457,14 +1450,14 @@ onUnmounted(() => {
                 </button>
               </div>
               <p v-if="textPromptError" class="text-[10px] text-red-400 bg-red-900/20 rounded px-2 py-1">{{ textPromptError }}</p>
-              <p class="text-[10px] text-gray-600">SAM3 segmentará el mejor match en la imagen actual. Se creará la etiqueta si no existe.</p>
+              <p class="text-[10px] text-gray-600">SAM3 segments the best match in the current image. The label is created if it does not exist.</p>
             </div>
 
             <div class="border-t border-gray-700/50" />
 
             <!-- ── Auto-labeling (all images) ── -->
             <div class="space-y-2">
-              <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Etiquetar todas las imágenes</p>
+              <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Label all images</p>
 
               <div>
                 <label class="text-xs text-gray-400 mb-1.5 block">{{ t('annotate.objectClasses') }}</label>
@@ -1499,7 +1492,7 @@ onUnmounted(() => {
                 <template v-if="autoLabelClassSource === 'custom'">
                   <input v-model="autoLabelClasses" type="text" placeholder="fish, coral, debris..." :disabled="autoLabelRunning"
                     class="w-full text-xs bg-background-tertiary border border-gray-600 rounded px-2 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-primary" />
-                  <p class="text-[10px] text-gray-600 mt-1">Separadas por coma. Se crean automáticamente.</p>
+                  <p class="text-[10px] text-gray-600 mt-1">Comma-separated. Created automatically.</p>
                 </template>
               </div>
 
@@ -1512,7 +1505,7 @@ onUnmounted(() => {
                 :disabled="autoLabelRunning || sam3Status !== 'available' || (autoLabelClassSource === 'custom' && !autoLabelClasses.trim()) || (autoLabelClassSource === 'existing' && categories.length === 0)"
                 class="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-40 transition-colors">
                 <Wand2 class="h-3.5 w-3.5" />
-                {{ autoLabelRunning ? 'Ejecutando...' : sam3Status !== 'available' ? 'SAM3 no disponible' : 'Etiquetar todas las imágenes' }}
+                {{ autoLabelRunning ? 'Running...' : sam3Status !== 'available' ? 'SAM3 unavailable' : 'Label all images' }}
               </button>
 
               <div v-if="autoLabelRunning || autoLabelStatus" class="space-y-1">
@@ -1526,30 +1519,20 @@ onUnmounted(() => {
     </div>
 
     <!-- ====== EXPORT MODAL ====== -->
-    <div v-if="showExport" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" @click.self="showExport = false">
-      <div class="bg-background-secondary border border-gray-700 rounded-xl p-6 w-96 space-y-4">
-        <h3 class="text-lg font-semibold text-white flex items-center gap-2"><Download class="h-5 w-5 text-primary" /> Export Dataset</h3>
-        <div>
-          <label class="text-sm text-gray-400 mb-1 block">Format</label>
-          <select v-model="exportFormat" class="w-full bg-background-tertiary border border-gray-600 rounded-lg px-3 py-2 text-white text-sm">
-            <option value="coco">COCO JSON</option>
-            <option value="yolo">YOLO</option>
-            <option value="voc">Pascal VOC</option>
-            <option value="all">All Formats</option>
-          </select>
-        </div>
-        <div class="text-xs text-gray-500 space-y-0.5">
-          <p><strong>Images:</strong> {{ totalImages }}</p>
-          <p><strong>Annotations:</strong> {{ editor.annotations.value.length }}</p>
-          <p><strong>Categories:</strong> {{ categories.length }}</p>
-        </div>
-        <div class="flex gap-2 justify-end">
-          <BaseButton @click="showExport = false" variant="outline" size="sm">Cancel</BaseButton>
-          <BaseButton @click="handleExport" :disabled="isExporting" variant="primary" size="sm">
-            <Download class="h-4 w-4" /> {{ isExporting ? 'Exporting...' : 'Export' }}
-          </BaseButton>
-        </div>
-      </div>
-    </div>
+    <ExportDialog
+      :open="showExport"
+      :coco-json-path="cocoJsonPath"
+      :stats="{ images: totalImages, annotations: editor.annotations.value.length, categories: categories.length }"
+      @close="showExport = false"
+    />
+
+    <!-- ====== PROPAGATE MODAL (INSID3) ====== -->
+    <PropagateDialog
+      :open="showPropagate"
+      :reference-image-path="getActiveImagePath()"
+      :reference-polygon="propagateDefaults.polygon"
+      :default-label="propagateDefaults.label"
+      @close="showPropagate = false"
+    />
   </div>
 </template>

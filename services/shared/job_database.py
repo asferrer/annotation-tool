@@ -13,8 +13,8 @@ from contextlib import contextmanager
 from pathlib import Path
 
 
-# Default database path
-DEFAULT_DB_PATH = os.environ.get("JOBS_DB_PATH", "/shared/db/jobs.db")
+# Default database path (matches the jobs_db volume mount in docker-compose)
+DEFAULT_DB_PATH = os.environ.get("JOBS_DB_PATH", "/app/db/jobs.db")
 
 # Thread-local storage for connections
 _local = threading.local()
@@ -261,6 +261,15 @@ class JobDatabase:
                 job_id
             ))
 
+            return cursor.rowcount > 0
+
+    def update_job_output(self, job_id: str, output_path: str) -> bool:
+        """Update a job's output path (e.g. final artifact location)."""
+        with self._cursor() as cursor:
+            cursor.execute(
+                "UPDATE jobs SET output_path = ?, updated_at = ? WHERE id = ?",
+                (output_path, datetime.now().isoformat(), job_id),
+            )
             return cursor.rowcount > 0
 
     def complete_job(
