@@ -2,6 +2,12 @@
 
 Web application for assisted annotation of image and video datasets, built around Meta's SAM 3. It runs as three Docker services: a Vue 3 frontend, a FastAPI gateway and a GPU-backed segmentation service.
 
+| Annotation review | Auto-labeling |
+|---|---|
+| ![Annotation review editor](docs/images/annotation-review.png) | ![Auto-labeling setup](docs/images/auto-labeling.png) |
+
+Example images from the [Neural Ocean](https://universe.roboflow.com/neural-ocean/neural_ocean) dataset (CC BY 4.0).
+
 ## Features
 
 - **Auto-labeling with SAM 3.** Label a whole image directory from a list of text prompts (concepts), with a configurable confidence threshold.
