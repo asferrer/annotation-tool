@@ -24,14 +24,30 @@ Example images from the [Neural Ocean](https://universe.roboflow.com/neural-ocea
 
 ## Architecture
 
+```mermaid
+flowchart TD
+    B["Browser"] --> FE["Frontend (Vue 3 + nginx)<br/>host :3001, container :80"]
+    FE -->|"/api/ proxied by nginx"| GW["Gateway (FastAPI)<br/>:8000"]
+    GW -->|"SEGMENTATION_SERVICE_URL"| SEG["Segmentation (FastAPI, GPU)<br/>:8002<br/>SAM 3, INSID3"]
+    DS[("datasets volume")]
+    DB[("jobs_db volume<br/>SQLite")]
+    GW --- DS
+    SEG --- DS
+    GW -.-> DB
+    SEG -.-> DB
 ```
-Browser
-   |
-Frontend (Vue 3 + nginx)   host port 3001 (container port 80)
-   |  /api/ proxied by nginx
-Gateway (FastAPI)          port 8000
-   |
-Segmentation (FastAPI)     port 8002   SAM 3, INSID3, GPU
+
+Typical workflow, from raw images to an exported dataset:
+
+```mermaid
+flowchart LR
+    IMG["Images in the<br/>datasets volume"] --> LAB["Auto-labeling<br/>POST /labeling/start<br/>text prompts + threshold"]
+    LAB --> JOB["Labeling job<br/>(SAM 3 on the GPU)"]
+    JOB --> COCO["COCO annotations<br/>(boxes and polygons)"]
+    COCO --> REV["Review and edit<br/>annotation editor"]
+    REV --> CMP["Compare with ground truth<br/>POST /comparison/evaluate"]
+    REV --> EXP["Export<br/>POST /export/start"]
+    EXP --> FMT["COCO, YOLO, CreateML,<br/>MOT, YouTube-VIS, CVAT video"]
 ```
 
 | Service | Port | Description |
